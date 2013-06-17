@@ -15,9 +15,6 @@ volatile unsigned char pointer=0;
 	// Represented DCF time in non-condensated form as specified in time.h
 struct tm DCFtime;
 
-	// Look up tables for text based Day of Week and Month of year.
-const char days_of_week[7][20]={"Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"};
-const char month_of_year[12][20]={"January","February","March","April","May","June","July","August","September","October","November","December"};
 
 /*
  * Function to check that the received checksums match with the sum of specified bits
@@ -188,13 +185,13 @@ void main(void)
 			DCFtime.tm_sec = 0;
 
 			clear_line(2);
-			sprintf(text, "%s, %s %d, %d",days_of_week[DCFtime.tm_wday], month_of_year[DCFtime.tm_mon],	DCFtime.tm_mday, (DCFtime.tm_year+1900));
+			strftime( text, 30, "%A %d, %B, %Y", &DCFtime );
 			write_line((unsigned char *) text);
 			// Send bitmap buffer to desired line
 			send_line(2);
 
 			clear_line(4);
-			sprintf(text, "  %d : %d : %d",DCFtime.tm_hour, DCFtime.tm_min,DCFtime.tm_sec);
+			strftime( text, 30, "%H:%M:%S", &DCFtime );
 			write_line((unsigned char *) text);
 			// Send bitmap buffer to desired line
 			send_line(4);
