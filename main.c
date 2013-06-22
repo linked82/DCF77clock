@@ -7,6 +7,9 @@
 #include <time.h>
 #include "ST7528.h"
 
+#define		UPDATE_CLOCK		1
+#define		UPDATE_DCF			2
+
 	// Variables for storing the received bit bang data, up to 64 bits
 volatile unsigned long long wheel=0;
 volatile unsigned long long DCFdata=0;
@@ -14,7 +17,12 @@ volatile unsigned long long DCFdata=0;
 volatile unsigned char pointer=0;
 	// Represented DCF time in non-condensated form as specified in time.h
 struct tm DCFtime;
-
+	// Represented autonomous time in non-condensated form as specified in time.h
+struct tm * CLOCKtime;
+	// Clock ticks for the timer as specified in time.h
+time_t Clock=0;
+	// Actions sent from interrupts to main program
+volatile unsigned char status=0;
 
 /*
  * Function to check that the received checksums match with the sum of specified bits
@@ -126,75 +134,101 @@ void main(void)
 
 	while(1)
 	{
-		// Wait for sinchronisation
+		// Wait for actions
 		_BIS_SR(LPM0_bits + GIE);
 		// For debug purposes
 		__no_operation();
 
-		// Incoming DCF77 data. If no errors, then convert it to text and display on screen
-		if((!checksumDCF(0,22)) && (!checksumDCF(23,29)) && (!checksumDCF(30,37)))
+		if((status&UPDATE_DCF)==UPDATE_DCF)
 		{
-			DCFtime.tm_year =  ((DCFdata>>1) & 0x1)*80;
-			DCFtime.tm_year += ((DCFdata>>2) & 0x1)*40;
-			DCFtime.tm_year += ((DCFdata>>3) & 0x1)*20;
-			DCFtime.tm_year += ((DCFdata>>4) & 0x1)*10;
-			DCFtime.tm_year += ((DCFdata>>5) & 0x1)*8;
-			DCFtime.tm_year += ((DCFdata>>6) & 0x1)*4;
-			DCFtime.tm_year += ((DCFdata>>7) & 0x1)*2;
-			DCFtime.tm_year += ((DCFdata>>8) & 0x1);
-			DCFtime.tm_year += 100;			 /* years since 1900                     */
 
-			DCFtime.tm_mon = ((DCFdata>>9)  & 0x1)*10;
-			DCFtime.tm_mon += ((DCFdata>>10) & 0x1)*8;
-			DCFtime.tm_mon += ((DCFdata>>11) & 0x1)*4;
-			DCFtime.tm_mon += ((DCFdata>>12) & 0x1)*2;
-			DCFtime.tm_mon += ((DCFdata>>13) & 0x1);
-			DCFtime.tm_mon -= 1;		 	/* months since January       - [0,11]  */
+			// Incoming DCF77 data. If no errors, then convert it to text and display on screen
+			if((!checksumDCF(0,22)) && (!checksumDCF(23,29)) && (!checksumDCF(30,37)))
+			{
+				DCFtime.tm_year =  ((DCFdata>>1) & 0x1)*80;
+				DCFtime.tm_year += ((DCFdata>>2) & 0x1)*40;
+				DCFtime.tm_year += ((DCFdata>>3) & 0x1)*20;
+				DCFtime.tm_year += ((DCFdata>>4) & 0x1)*10;
+				DCFtime.tm_year += ((DCFdata>>5) & 0x1)*8;
+				DCFtime.tm_year += ((DCFdata>>6) & 0x1)*4;
+				DCFtime.tm_year += ((DCFdata>>7) & 0x1)*2;
+				DCFtime.tm_year += ((DCFdata>>8) & 0x1);
+				DCFtime.tm_year += 100;			 /* years since 1900                     */
 
-			DCFtime.tm_wday = ((DCFdata>>14) & 0x1)*4;
-			DCFtime.tm_wday += ((DCFdata>>15) & 0x1)*2;
-			DCFtime.tm_wday += ((DCFdata>>16) & 0x1);
-			if(DCFtime.tm_wday==7)	DCFtime.tm_wday=0;
-											/* days since Sunday          - [0,6]   */
+				DCFtime.tm_mon = ((DCFdata>>9)  & 0x1)*10;
+				DCFtime.tm_mon += ((DCFdata>>10) & 0x1)*8;
+				DCFtime.tm_mon += ((DCFdata>>11) & 0x1)*4;
+				DCFtime.tm_mon += ((DCFdata>>12) & 0x1)*2;
+				DCFtime.tm_mon += ((DCFdata>>13) & 0x1);
+				DCFtime.tm_mon -= 1;		 	/* months since January       - [0,11]  */
 
-			DCFtime.tm_mday = ((DCFdata>>17)  & 0x1)*20;
-			DCFtime.tm_mday += ((DCFdata>>18)  & 0x1)*10;
-			DCFtime.tm_mday += ((DCFdata>>19) & 0x1)*8;
-			DCFtime.tm_mday += ((DCFdata>>20) & 0x1)*4;
-			DCFtime.tm_mday += ((DCFdata>>21) & 0x1)*2;
-			DCFtime.tm_mday += ((DCFdata>>22) & 0x1);
-											/* day of the month           - [1,31]  */
+				DCFtime.tm_wday = ((DCFdata>>14) & 0x1)*4;
+				DCFtime.tm_wday += ((DCFdata>>15) & 0x1)*2;
+				DCFtime.tm_wday += ((DCFdata>>16) & 0x1);
+				if(DCFtime.tm_wday==7)	DCFtime.tm_wday=0;
+												/* days since Sunday          - [0,6]   */
 
-			DCFtime.tm_hour = ((DCFdata>>24)  & 0x1)*20;
-			DCFtime.tm_hour += ((DCFdata>>25)  & 0x1)*10;
-			DCFtime.tm_hour += ((DCFdata>>26) & 0x1)*8;
-			DCFtime.tm_hour += ((DCFdata>>27) & 0x1)*4;
-			DCFtime.tm_hour += ((DCFdata>>28) & 0x1)*2;
-			DCFtime.tm_hour += ((DCFdata>>29) & 0x1);
-			 	 	 	 	 	 	 	 	 /* hours after the midnight   - [0,23]  */
+				DCFtime.tm_mday = ((DCFdata>>17)  & 0x1)*20;
+				DCFtime.tm_mday += ((DCFdata>>18)  & 0x1)*10;
+				DCFtime.tm_mday += ((DCFdata>>19) & 0x1)*8;
+				DCFtime.tm_mday += ((DCFdata>>20) & 0x1)*4;
+				DCFtime.tm_mday += ((DCFdata>>21) & 0x1)*2;
+				DCFtime.tm_mday += ((DCFdata>>22) & 0x1);
+												/* day of the month           - [1,31]  */
 
-			DCFtime.tm_min = ((DCFdata>>31)  & 0x1)*40;
-			DCFtime.tm_min += ((DCFdata>>32)  & 0x1)*20;
-			DCFtime.tm_min += ((DCFdata>>33)  & 0x1)*10;
-			DCFtime.tm_min += ((DCFdata>>34) & 0x1)*8;
-			DCFtime.tm_min += ((DCFdata>>35) & 0x1)*4;
-			DCFtime.tm_min += ((DCFdata>>36) & 0x1)*2;
-			DCFtime.tm_min += ((DCFdata>>37) & 0x1);
-											/* minutes after the hour     - [0,59]  */
+				DCFtime.tm_hour = ((DCFdata>>24)  & 0x1)*20;
+				DCFtime.tm_hour += ((DCFdata>>25)  & 0x1)*10;
+				DCFtime.tm_hour += ((DCFdata>>26) & 0x1)*8;
+				DCFtime.tm_hour += ((DCFdata>>27) & 0x1)*4;
+				DCFtime.tm_hour += ((DCFdata>>28) & 0x1)*2;
+				DCFtime.tm_hour += ((DCFdata>>29) & 0x1);
+												 /* hours after the midnight   - [0,23]  */
 
-			DCFtime.tm_sec = 0;
+				DCFtime.tm_min = ((DCFdata>>31)  & 0x1)*40;
+				DCFtime.tm_min += ((DCFdata>>32)  & 0x1)*20;
+				DCFtime.tm_min += ((DCFdata>>33)  & 0x1)*10;
+				DCFtime.tm_min += ((DCFdata>>34) & 0x1)*8;
+				DCFtime.tm_min += ((DCFdata>>35) & 0x1)*4;
+				DCFtime.tm_min += ((DCFdata>>36) & 0x1)*2;
+				DCFtime.tm_min += ((DCFdata>>37) & 0x1);
+												/* minutes after the hour     - [0,59]  */
+
+				DCFtime.tm_sec = 0;
+
+
+				// Update actual clock
+				Clock = mktime (&DCFtime);
+
+				// Print on screen when has been updated the clock for last time.
+				clear_line(8);
+				strftime( text, 30, "Last updated %m/%d/%y  %H:%M", &DCFtime );
+				write_line((unsigned char *) text);
+				// Send bitmap buffer to desired line
+				send_line(8);
+
+				// Clear flag
+				status &= ~UPDATE_DCF;
+			}
+		}
+		if(status&UPDATE_CLOCK)
+		{
+			// Go from condensated to no-condensated
+			CLOCKtime  = localtime ( (const time_t *) &Clock);
 
 			clear_line(2);
-			strftime( text, 30, "%A %d, %B, %Y", &DCFtime );
+			strftime( text, 30, "%A %d, %B, %Y", CLOCKtime );
 			write_line((unsigned char *) text);
 			// Send bitmap buffer to desired line
 			send_line(2);
 
 			clear_line(4);
-			strftime( text, 30, "%H:%M:%S", &DCFtime );
+			strftime( text, 30, "%H:%M:%S", CLOCKtime );
 			write_line((unsigned char *) text);
 			// Send bitmap buffer to desired line
 			send_line(4);
+
+			// Clear flag
+			status &= ~UPDATE_CLOCK;
 		}
 	}
 }
@@ -204,6 +238,9 @@ void main(void)
 __interrupt void Timer0_A0 (void)
 {
 	P1OUT ^= 0x01;                            // Toggle P1.0
+	Clock++;
+	status |= UPDATE_CLOCK;
+	__bic_SR_register_on_exit(CPUOFF);
 }
 
 
@@ -219,6 +256,7 @@ __interrupt void Timer1_A0 (void)
 	if(pointer>=58)
 	{
 		DCFdata = wheel;
+		status |= UPDATE_DCF;
 		__bic_SR_register_on_exit(CPUOFF);
 	}
 
@@ -244,38 +282,29 @@ __interrupt void Timer1_A1 (void)
 
 		read = TA1CCR1;
 
-//		if((read&CCI)==CCI)
-//		{
-//			TA1R = 0;
-//		}
-//		else
-//		{
+
 		// Distinguish 0's and 1's with time window
-			if(read>2000)
+		if(read>2000)
+		{
+			// This is a '0', theoretically 3267 cycles
+			if(read<4000)
 			{
-				// This is a '0', theoretically 3267 cycles
-				if(read<4000)
+				pointer++;
+				wheel = wheel<<1;
+			}
+			else
+			{	//This is a '1', theoretically 6553 cycles
+				if(read<7000)
 				{
 					pointer++;
 					wheel = wheel<<1;
+					wheel |= 0x01;
 				}
-				else
-				{	//This is a '1', theoretically 6553 cycles
-					if(read<7000)
-					{
-						pointer++;
-						wheel = wheel<<1;
-						wheel |= 0x01;
-					}
-				}
-
 			}
-//		}
-	//__bic_SR_register_on_exit(CPUOFF + GIE);
-	break;
-//	case 0x0A:
-//	break;
 
+		}
+
+	break;
 	}
 }
 

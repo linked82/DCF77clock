@@ -4,6 +4,7 @@ This was made from the scratch using the Launchpad microcontroller.
 The hardware has the following characteristics:
   - Platform MSP430 Launchpad
   - Processor MSP430G2553 @ 8MHz
+  - 32768 Hz crystal soldered to Launchpad
   - DCF77 clock receiver from Conrad
     http://www.conrad.com/ce/en/product/641138/DCF-receiver-board
     
@@ -16,7 +17,8 @@ The DCF77 module is hard wire connected to the Launchpad  MSP-EXP430G2 using wir
 The software is capable of
   - Receiving DCF77 date & time
   - Checking parity bits
+  - Displaying DCF clock
+  - Running as an autonomous clock, updated through DCF only
 
-The next implementation will be to display time on the screen instead of the debugger
 
 Have fun and remember to use at your own risk, given that I don't guarantee that this crap won't burn your house.
